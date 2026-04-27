@@ -1,0 +1,37 @@
+{
+  "name": "@ledgermem/notion",
+  "version": "0.1.0",
+  "description": "LedgerMem Notion connector — backfill and webhook sync of Notion pages into LedgerMem.",
+  "type": "module",
+  "main": "dist/server.js",
+  "bin": {
+    "notion-import": "dist/cli.js",
+    "notion-sync": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "import": "tsx src/cli.ts notion-import",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ledgermem/memory": "^0.1.0",
+    "@notionhq/client": "^2.2.15",
+    "commander": "^12.1.0",
+    "express": "^4.21.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.7.4",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  },
+  "license": "MIT"
+}
