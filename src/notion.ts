@@ -104,30 +104,51 @@ export function extractTitle(properties: unknown): string {
   return "Untitled";
 }
 
-export async function fetchPageText(
+// Cap recursion depth so a pathological deeply-nested page can't stall the
+// sync. Notion's UI rarely renders past ~10 levels of nesting in practice.
+const MAX_BLOCK_DEPTH = 10;
+
+async function collectBlockText(
   notion: Client,
-  pageId: string,
-): Promise<string> {
-  const parts: string[] = [];
+  blockId: string,
+  depth: number,
+  out: string[],
+): Promise<void> {
   let cursor: string | undefined;
   do {
     const res = await withRateLimitRetry(() =>
       notion.blocks.children.list({
-        block_id: pageId,
+        block_id: blockId,
         start_cursor: cursor,
         page_size: 100,
       }),
     );
     for (const block of res.results as Array<BlockBase & BlockMap>) {
-      if (!TEXT_BLOCK_TYPES.has(block.type)) continue;
-      const blockBody = (block as unknown as Record<string, { rich_text?: RichTextItem[] }>)[
-        block.type
-      ];
-      const text = richTextToString(blockBody?.rich_text);
-      if (text) parts.push(text);
+      if (TEXT_BLOCK_TYPES.has(block.type)) {
+        const blockBody = (
+          block as unknown as Record<string, { rich_text?: RichTextItem[] }>
+        )[block.type];
+        const text = richTextToString(blockBody?.rich_text);
+        if (text) out.push(text);
+      }
+      // Toggles, list items, callouts, etc. nest their content as children.
+      // Without recursion the synced memory only contains the top-level row
+      // and silently drops everything inside, which made `recall` miss text
+      // that was clearly present on the page.
+      if (block.has_children && block.id && depth < MAX_BLOCK_DEPTH) {
+        await collectBlockText(notion, block.id, depth + 1, out);
+      }
     }
     cursor = res.has_more ? (res.next_cursor ?? undefined) : undefined;
   } while (cursor);
+}
+
+export async function fetchPageText(
+  notion: Client,
+  pageId: string,
+): Promise<string> {
+  const parts: string[] = [];
+  await collectBlockText(notion, pageId, 0, parts);
   return parts.join("\n");
 }
 
