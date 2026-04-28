@@ -46,16 +46,37 @@ export function buildApp(): express.Express {
 
   app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
+  // Bounded dedup of (pageId, lastEditedTime) so the same Notion edit doesn't
+  // re-ingest if Notion redelivers the webhook.
+  const seen = new Set<string>();
+  const SEEN_MAX = 5000;
+  const isDuplicate = (key: string): boolean => {
+    if (seen.has(key)) return true;
+    seen.add(key);
+    if (seen.size > SEEN_MAX) {
+      const oldest = seen.values().next().value;
+      if (oldest !== undefined) seen.delete(oldest);
+    }
+    return false;
+  };
+
   app.post("/webhook", async (req: Request, res: Response) => {
     const raw = (req as Request & { rawBody?: Buffer }).rawBody;
-    if (cfg.notionWebhookSecret && raw) {
-      const ok = verifyNotionSignature(
-        raw,
-        req.header("x-notion-signature"),
-        cfg.notionWebhookSecret,
-      );
-      if (!ok) return res.sendStatus(401);
+    // Webhook secret is REQUIRED — refusing unsigned deliveries is the only
+    // thing keeping a random caller from triggering Notion fetches against
+    // the configured workspace token.
+    if (!cfg.notionWebhookSecret) {
+      console.error("rejecting webhook: NOTION_WEBHOOK_SECRET not configured");
+      return res.sendStatus(503);
     }
+    if (!raw) return res.sendStatus(400);
+    const ok = verifyNotionSignature(
+      raw,
+      req.header("x-notion-signature"),
+      cfg.notionWebhookSecret,
+    );
+    if (!ok) return res.sendStatus(401);
+
     const body = req.body as
       | NotionWebhookEvent
       | { verification_token?: string };
@@ -70,10 +91,13 @@ export function buildApp(): express.Express {
     if (!pageId) return res.sendStatus(204);
 
     res.sendStatus(200);
+    // Use the delivery id from the header when present so retries of the same
+    // delivery are dropped; fall back to pageId for older payload shapes.
+    const deliveryId = req.header("x-notion-request-id") ?? pageId;
+    if (isDuplicate(deliveryId)) return;
     try {
       await handlePageUpdate(notion, memory, pageId);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("handlePageUpdate failed:", err);
     }
   });

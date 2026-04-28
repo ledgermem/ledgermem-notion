@@ -4,6 +4,55 @@ interface RichTextItem {
   plain_text?: string;
 }
 
+interface NotionRateLimitError {
+  code?: string;
+  status?: number;
+  headers?: { get?(name: string): string | null } | Record<string, string>;
+}
+
+function getRetryAfterMs(err: unknown): number | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as NotionRateLimitError;
+  if (e.status !== 429 && e.code !== "rate_limited") return null;
+  const headers = e.headers;
+  let raw: string | null = null;
+  if (headers && typeof (headers as { get?: unknown }).get === "function") {
+    raw = (headers as { get(name: string): string | null }).get("retry-after");
+  } else if (headers && typeof headers === "object") {
+    const h = headers as Record<string, string>;
+    raw = h["retry-after"] ?? h["Retry-After"] ?? null;
+  }
+  const seconds = raw ? Number(raw) : NaN;
+  if (!Number.isFinite(seconds) || seconds <= 0) return 1000;
+  return Math.min(seconds * 1000, 60_000);
+}
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Wrap a Notion SDK call with exponential-ish 429 retry. Notion sets
+ * `retry-after` on rate-limit responses and the SDK surfaces the header on
+ * the thrown error; we honor it instead of silently swallowing the failure.
+ */
+async function withRateLimitRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 5,
+): Promise<T> {
+  let attempt = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      return await fn();
+    } catch (err) {
+      const wait = getRetryAfterMs(err);
+      if (wait === null || attempt >= maxRetries) throw err;
+      await sleep(wait);
+      attempt += 1;
+    }
+  }
+}
+
 interface BlockBase {
   type: string;
   has_children?: boolean;
@@ -62,11 +111,13 @@ export async function fetchPageText(
   const parts: string[] = [];
   let cursor: string | undefined;
   do {
-    const res = await notion.blocks.children.list({
-      block_id: pageId,
-      start_cursor: cursor,
-      page_size: 100,
-    });
+    const res = await withRateLimitRetry(() =>
+      notion.blocks.children.list({
+        block_id: pageId,
+        start_cursor: cursor,
+        page_size: 100,
+      }),
+    );
     for (const block of res.results as Array<BlockBase & BlockMap>) {
       if (!TEXT_BLOCK_TYPES.has(block.type)) continue;
       const blockBody = (block as unknown as Record<string, { rich_text?: RichTextItem[] }>)[
@@ -85,11 +136,13 @@ export async function* iterateWorkspacePages(
 ): AsyncGenerator<NotionPage> {
   let cursor: string | undefined;
   do {
-    const res = await notion.search({
-      filter: { property: "object", value: "page" },
-      page_size: 100,
-      start_cursor: cursor,
-    });
+    const res = await withRateLimitRetry(() =>
+      notion.search({
+        filter: { property: "object", value: "page" },
+        page_size: 100,
+        start_cursor: cursor,
+      }),
+    );
     for (const item of res.results) {
       if (item.object !== "page") continue;
       const page = item as unknown as {
