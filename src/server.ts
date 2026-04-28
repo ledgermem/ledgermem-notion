@@ -108,10 +108,33 @@ export function buildApp(): express.Express {
 export async function startServer(): Promise<void> {
   const cfg = loadConfig();
   const app = buildApp();
-  app.listen(cfg.port, () => {
+  const server = app.listen(cfg.port, () => {
     // eslint-disable-next-line no-console
     console.log(`LedgerMem Notion sync listening on :${cfg.port}`);
   });
+
+  // Graceful shutdown — drain in-flight handlePageUpdate calls before exit so
+  // SIGTERM doesn't tear down a Notion-block fetch mid-pagination and leave
+  // half a page ingested.
+  let shuttingDown = false;
+  const shutdown = (signal: string): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    // eslint-disable-next-line no-console
+    console.log(`Received ${signal}, draining HTTP server…`);
+    const force = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.warn("Shutdown timed out, forcing exit.");
+      process.exit(1);
+    }, 30_000);
+    force.unref();
+    server.close(() => {
+      clearTimeout(force);
+      process.exit(0);
+    });
+  };
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
