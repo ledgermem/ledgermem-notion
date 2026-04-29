@@ -1,10 +1,10 @@
 import type { Client } from "@notionhq/client";
-import type { LedgerMem } from "@ledgermem/memory";
+import type { Mnemo } from "@getmnemo/memory";
 import { fetchPageText, iterateWorkspacePages, type NotionPage } from "./notion.js";
 
 export interface MemoryClient {
-  add: LedgerMem["add"];
-  search: LedgerMem["search"];
+  add: Mnemo["add"];
+  search: Mnemo["search"];
 }
 
 export interface IngestResult {

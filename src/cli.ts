@@ -2,24 +2,24 @@
 import "dotenv/config";
 import { Command } from "commander";
 import { Client } from "@notionhq/client";
-import { LedgerMem } from "@ledgermem/memory";
+import { Mnemo } from "@getmnemo/memory";
 import { loadConfig } from "./config.js";
 import { backfillWorkspace } from "./sync.js";
 
 const program = new Command();
 program
-  .name("ledgermem-notion")
-  .description("LedgerMem connector for Notion");
+  .name("getmnemo-notion")
+  .description("Mnemo connector for Notion");
 
 program
   .command("notion-import")
-  .description("Walk the Notion workspace and ingest every page into LedgerMem")
+  .description("Walk the Notion workspace and ingest every page into Mnemo")
   .action(async () => {
     const cfg = loadConfig();
     const notion = new Client({ auth: cfg.notionToken });
-    const memory = new LedgerMem({
-      apiKey: cfg.ledgermemApiKey,
-      workspaceId: cfg.ledgermemWorkspaceId,
+    const memory = new Mnemo({
+      apiKey: cfg.getmnemoApiKey,
+      workspaceId: cfg.getmnemoWorkspaceId,
     });
     const summary = await backfillWorkspace(notion, memory, (r) => {
       const tag = r.skipped ? "skip" : "ingest";

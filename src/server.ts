@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import { Client } from "@notionhq/client";
-import { LedgerMem } from "@ledgermem/memory";
+import { Mnemo } from "@getmnemo/memory";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { loadConfig } from "./config.js";
 import {
@@ -30,9 +30,9 @@ function verifyNotionSignature(
 export function buildApp(): express.Express {
   const cfg = loadConfig();
   const notion = new Client({ auth: cfg.notionToken });
-  const memory = new LedgerMem({
-    apiKey: cfg.ledgermemApiKey,
-    workspaceId: cfg.ledgermemWorkspaceId,
+  const memory = new Mnemo({
+    apiKey: cfg.getmnemoApiKey,
+    workspaceId: cfg.getmnemoWorkspaceId,
   });
 
   const app = express();
@@ -110,7 +110,7 @@ export async function startServer(): Promise<void> {
   const app = buildApp();
   const server = app.listen(cfg.port, () => {
     // eslint-disable-next-line no-console
-    console.log(`LedgerMem Notion sync listening on :${cfg.port}`);
+    console.log(`Mnemo Notion sync listening on :${cfg.port}`);
   });
 
   // Graceful shutdown — drain in-flight handlePageUpdate calls before exit so
