@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import { Client } from "@notionhq/client";
-import { Mnemo } from "@getmnemo/memory";
+import { Mnemo } from "@mnemo/memory";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { loadConfig } from "./config.js";
 import {

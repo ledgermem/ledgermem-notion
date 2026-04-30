@@ -1,5 +1,5 @@
 import type { Client } from "@notionhq/client";
-import type { Mnemo } from "@getmnemo/memory";
+import type { Mnemo } from "@mnemo/memory";
 import { fetchPageText, iterateWorkspacePages, type NotionPage } from "./notion.js";
 
 export interface MemoryClient {

@@ -2,7 +2,7 @@
 import "dotenv/config";
 import { Command } from "commander";
 import { Client } from "@notionhq/client";
-import { Mnemo } from "@getmnemo/memory";
+import { Mnemo } from "@mnemo/memory";
 import { loadConfig } from "./config.js";
 import { backfillWorkspace } from "./sync.js";
 
